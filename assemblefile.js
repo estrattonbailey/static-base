@@ -1,14 +1,41 @@
-var site,
+var site, config,
     assemble = require('assemble'),
     rename = require('gulp-rename'),
-    watch = require('base-watch');
+    watch = require('base-watch'),
+    get = require('get-value');
 
+/**
+ * Define Site
+ */
 site = assemble({
   layout: 'default' 
 });
 
-site.use(watch());
+/**
+ * Pull in site.config.json
+ */
+site.data({
+  site: require('./site.config.json')
+});
 
+/**
+ * Init
+ */
+site.use(watch());
+site.create('posts');
+
+/**
+ * Helpers
+ */
+site.helpers('./helpers/*.js');
+site.helper('markdown', require('helper-markdown'));
+site.helper('get', function(prop) {
+  return get(this.context, prop);
+});
+
+/**
+ * Tasks
+ */
 site.task('load', function(cb){
   site.layouts('./src/markup/layouts/*.hbs');
 
@@ -16,25 +43,39 @@ site.task('load', function(cb){
   site.partials('./src/markup/components/*.hbs');
 
   site.pages('./src/markup/*.hbs');
-  site.pages('./src/posts/*.md');
-
-  site.helpers('./helpers/*.js');
-  site.helper('markdown', require('helper-markdown'));
+  site.posts('./src/posts/**/*.md');
 
   cb()
 });
-
-site.task('default', 'load', function() {
-  return site.toStream('pages')
+site.task('pages', function(){
+  return site.toStream('pages', config)
     .pipe(site.renderFile())
     .pipe(rename({
       extname: '.html'
     }))
     .pipe(site.dest('./dist'));
 });
-
-site.task('watch', function(){
-  site.watch(['./src/markup/**/*.hbs', './src/posts/*.md'], ['default']);
+site.task('posts', function(){
+  return site.toStream('posts', config)
+    .pipe(site.renderFile())
+    .pipe(rename({
+      extname: '.html'
+    }))
+    .pipe(site.dest('./dist'));
+});
+site.task('watch:pages', function(){
+  site.watch(['./src/markup/**/*.hbs'], ['pages']);
+});
+site.task('watch:posts', function(){
+  site.watch(['./src/posts/**/*.md'], ['posts']);
 });
 
+/**
+ * Default
+ * Runs watch, which in turn runs the builds
+ * for pages and posts.
+ */
+site.task('default', 'load', site.parallel(['watch:pages', 'watch:posts']));
+
+/**/
 module.exports = site;
